@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API Connection</title>
+</head>
+<body>
+    <h1>Testing Elo Cidadão API</h1>
+    <button onclick="testConnection()">Test API Connection</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testConnection() {
+            const resultDiv = document.getElementById('result');
+            try {
+                // Test direct backend connection
+                const response = await fetch('http://localhost:3001/api/cities');
+                const data = await response.json();
+                resultDiv.innerHTML = '<h3>✅ Backend Connection Working!</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                // Test frontend proxy
+                try {
+                    const proxyResponse = await fetch('/api/cities');
+                    const proxyData = await proxyResponse.json();
+                    resultDiv.innerHTML += '<h3>✅ Frontend Proxy Working!</h3><pre>' + JSON.stringify(proxyData, null, 2) + '</pre>';
+                } catch (proxyError) {
+                    resultDiv.innerHTML += '<h3>❌ Frontend Proxy Error: ' + proxyError.message + '</h3>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<h3>❌ Connection Error: ' + error.message + '</h3>';
+            }
+        }
+        
+        // Auto test on load
+        window.onload = testConnection;
+    </script>
+</body>
+</html>
