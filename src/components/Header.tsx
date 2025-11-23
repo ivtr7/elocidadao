@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom'
-import { Bell, Search, User, Settings, LogOut, Home } from 'lucide-react'
+import { Bell, Search, User, Settings, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { 
@@ -27,16 +26,6 @@ export function Header() {
         </div>
         
         <div className="flex items-center space-x-3">
-          <Link to="/landing">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              <Home className="h-4 w-4" />
-              <span className="hidden sm:inline">Landing</span>
-            </Button>
-          </Link>
           <Button 
             variant="ghost" 
             size="icon"

@@ -5,6 +5,15 @@ import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Ensure UTF-8 encoding
+  build: {
+    charset: 'utf8',
+    rollupOptions: {
+      output: {
+        charset: 'utf8'
+      }
+    }
+  },
   plugins: [
     react({
       babel: {

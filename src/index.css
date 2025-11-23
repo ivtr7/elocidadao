@@ -1,5 +1,6 @@
-/* Import Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Import Google Fonts with full Latin character support */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap&subset=latin,latin-ext');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap&subset=latin,latin-ext');
 
 /* Import custom design system */
 @import './styles/design-system.css';
@@ -60,20 +61,46 @@
   * {
     @apply border-border;
   }
+  
+  html {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-encoding: utf-8;
+  }
+  
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-    font-feature-settings: 'cv11', 'ss01';
+    font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'liga', 'kern';
     font-variation-settings: 'opsz' 400;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-encoding: utf-8;
+    unicode-bidi: embed;
+    direction: ltr;
+  }
+  
+  /* Ensure all text elements use proper encoding */
+  * {
+    font-family: inherit;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Force UTF-8 for all text content */
+  input, textarea, select, button {
+    font-family: inherit;
+    font-encoding: utf-8;
   }
 
   /* Headings with better hierarchy */
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
     line-height: 1.3;
+    font-family: 'Inter', 'Poppins', sans-serif;
   }
 
   h1 { @apply text-3xl md:text-4xl lg:text-5xl; }
@@ -87,6 +114,7 @@
   p {
     @apply leading-relaxed;
     margin-bottom: 1rem;
+    font-family: 'Inter', 'Poppins', sans-serif;
   }
 
   /* Enhanced focus states */
