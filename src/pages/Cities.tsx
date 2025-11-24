@@ -121,7 +121,9 @@ export default function Cities() {
       const response = await fetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8'
         },
         body: JSON.stringify(payload),
       })
@@ -201,6 +203,11 @@ export default function Cities() {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
       const response = await fetch(`${apiUrl}/api/cities/${cityId}`, {
         method: 'DELETE',
+        headers: {
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
       })
 
       if (!response.ok) {

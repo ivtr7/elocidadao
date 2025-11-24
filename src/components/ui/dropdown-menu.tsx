@@ -46,8 +46,8 @@ const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTML
       return React.cloneElement(children as React.ReactElement, {
         ref,
         className: cn("inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50", className),
-        onClick: (e: React.MouseEvent) => {
-          onClick?.(e)
+        onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+          onClick?.(e as any)
           onOpenChange(true)
         },
         ...props

@@ -147,7 +147,12 @@ export const useStore = create<AppState>((set, get) => ({
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
       const response = await fetch(`${apiUrl}/api/cities`, {
         cache: 'no-cache',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 
+          'Cache-Control': 'no-cache',
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
       })
       if (!response.ok) throw new Error('Erro ao buscar cidades')
       const cities = await response.json()
@@ -174,7 +179,12 @@ export const useStore = create<AppState>((set, get) => ({
       const url = cityId ? `${apiUrl}/api/projects?city_id=${cityId}` : `${apiUrl}/api/projects`
       const response = await fetch(url, {
         cache: 'no-cache',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 
+          'Cache-Control': 'no-cache',
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
       })
       if (!response.ok) throw new Error('Erro ao buscar projetos')
       const projects = await response.json()
@@ -200,7 +210,12 @@ export const useStore = create<AppState>((set, get) => ({
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
       const response = await fetch(`${apiUrl}/api/citizens${cityId ? `?city_id=${cityId}` : ''}`, {
         cache: 'no-cache',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 
+          'Cache-Control': 'no-cache',
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
       })
       if (!response.ok) throw new Error('Erro ao buscar cidadãos')
       const citizens = await response.json()

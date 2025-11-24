@@ -146,7 +146,7 @@ export default function Citizens() {
                         {citizen.phone}
                       </CardDescription>
                     </div>
-                    <Badge variant={getEngagementBadge(citizen.engagement_level)}>
+                    <Badge variant={getEngagementBadge(citizen.engagement_level) as any}>
                       {getEngagementLabel(citizen.engagement_level)}
                     </Badge>
                   </div>

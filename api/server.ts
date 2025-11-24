@@ -5,9 +5,22 @@ import { createClient } from '@supabase/supabase-js';
 import multer from 'multer';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createHash } from 'crypto';
+import { rateLimiter } from './middleware/rateLimiter.js';
+import { validate } from './middleware/validation.js';
+import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
+import { createCitySchema, createProjectSchema, createVoteSchema, createCommentSchema, createComplaintSchema } from './validations/projectValidation.js';
 
 // Carregar variáveis de ambiente
 dotenv.config();
+
+// Garantir UTF-8 no ambiente Node.js
+process.env.NODE_OPTIONS = (process.env.NODE_OPTIONS || '') + ' --input-type=module --experimental-specifier-resolution=node';
+if (process.stdout.setDefaultEncoding) {
+  process.stdout.setDefaultEncoding('utf8');
+}
+if (process.stderr.setDefaultEncoding) {
+  process.stderr.setDefaultEncoding('utf8');
+}
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -22,13 +35,26 @@ const supabase = createClient(
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
 // Middlewares
-app.use(cors());
-app.use(express.json({ charset: 'utf-8' }));
-app.use(express.urlencoded({ extended: true, charset: 'utf-8' }));
+app.use(cors({
+  origin: true, // Permitir todas as origens
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Accept-Charset', 'X-Requested-With']
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Rate Limiting
+app.use('/api', rateLimiter);
 
 // Ensure UTF-8 encoding for all responses
 app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Accept-Charset', 'utf-8');
   res.charset = 'utf-8';
   next();
 });
@@ -37,22 +63,18 @@ app.use((req, res, next) => {
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Rotas de Cidades
-app.post('/api/cities', async (req, res) => {
-  try {
-    const { name, state, population, chamber_url } = req.body;
-    
-    const { data, error } = await supabase
-      .from('cities')
-      .insert([{ name, state, population, chamber_url }])
-      .select()
-      .single();
+app.post('/api/cities', validate(createCitySchema), asyncHandler(async (req, res) => {
+  const { name, state, population, chamber_url, active } = req.body;
+  
+  const { data, error } = await supabase
+    .from('cities')
+    .insert([{ name, state, population, chamber_url, active: active !== undefined ? active : true }])
+    .select()
+    .single();
 
-    if (error) throw error;
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  if (error) throw error;
+  res.json(data);
+}));
 
 app.get('/api/cities', async (req, res) => {
   try {
@@ -104,9 +126,19 @@ app.delete('/api/cities/:id', async (req, res) => {
 });
 
 // Rotas de Projetos
-app.post('/api/projects', async (req, res) => {
-  try {
-    const { city_id, number, title, full_text, tags } = req.body;
+app.post('/api/projects', validate(createProjectSchema), asyncHandler(async (req, res) => {
+  const { 
+    city_id, 
+    number, 
+    title, 
+    full_text, 
+    tags,
+    author,
+    main_impacts,
+    vote_date,
+    original_url,
+    status = 'em_análise'
+  } = req.body;
     
     let simple_title = title;
     let summary = '';
@@ -127,12 +159,14 @@ Forneça:
 2. Um resumo em linguagem simples (máximo 500 caracteres)
 3. Quem se beneficia com este projeto
 4. Quem pode ser prejudicado
+5. Principais impactos esperados (lista de até 5 itens)
 
 Formato de resposta:
 TITULO_SIMPLIFICADO: [texto]
 RESUMO: [texto]
 BENEFICIADOS: [texto]
-PREJUDICADOS: [texto]`;
+PREJUDICADOS: [texto]
+IMPACTOS: [item1, item2, item3]`;
 
       const result = await model.generateContent(simplificationPrompt);
       const response = await result.response;
@@ -143,12 +177,31 @@ PREJUDICADOS: [texto]`;
       summary = aiText.match(/RESUMO: (.+)/)?.[1] || '';
       who_benefits = aiText.match(/BENEFICIADOS: (.+)/)?.[1] || '';
       who_loses = aiText.match(/PREJUDICADOS: (.+)/)?.[1] || '';
+      const impactsText = aiText.match(/IMPACTOS: (.+)/)?.[1] || '';
+      let finalMainImpacts = main_impacts || [];
+      if (impactsText && finalMainImpacts.length === 0) {
+        const parsedImpacts = impactsText.split(',').map(i => i.trim()).filter(Boolean);
+        if (parsedImpacts.length > 0) {
+          finalMainImpacts = parsedImpacts;
+        }
+      }
+      
+      // Garantir que main_impacts seja um array
+      if (!Array.isArray(finalMainImpacts)) {
+        finalMainImpacts = finalMainImpacts ? [finalMainImpacts] : [];
+      }
     } catch (aiError) {
       console.log('AI processing failed, using fallback:', aiError.message);
       // Usar fallback simples quando IA não está disponível
       summary = full_text.substring(0, 200) + '...';
       who_benefits = 'Cidadãos da cidade';
       who_loses = 'Nenhum grupo específico';
+    }
+    
+    // Garantir que finalMainImpacts existe mesmo se o try falhar
+    let finalMainImpacts = main_impacts || [];
+    if (!Array.isArray(finalMainImpacts)) {
+      finalMainImpacts = finalMainImpacts ? [finalMainImpacts] : [];
     }
     
     const { data, error } = await supabase
@@ -162,7 +215,13 @@ PREJUDICADOS: [texto]`;
         full_text,
         who_benefits,
         who_loses,
-        tags: tags || []
+        tags: tags || [],
+        author: author || null,
+        main_impacts: finalMainImpacts,
+        vote_date: vote_date || null,
+        original_url: original_url || null,
+        status: status,
+        notified: false
       }])
       .select()
       .single();
@@ -173,10 +232,7 @@ PREJUDICADOS: [texto]`;
     notifyCitizens(city_id, 'new_project', { project_id: data.id });
     
     res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+}));
 
 app.get('/api/projects', async (req, res) => {
   try {
@@ -195,6 +251,9 @@ app.get('/api/projects', async (req, res) => {
     const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
+    
+    // Garantir UTF-8 na resposta
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -269,11 +328,11 @@ app.post('/api/projects/:id/notify', async (req, res) => {
 });
 
 // Rotas de Votos
-app.post('/api/votes', async (req, res) => {
-  try {
-    const { project_id, citizen_id, position, reasoning, neighborhood } = req.body;
-    
-    // Verificar se o cidadão já votou neste projeto
+app.post('/api/votes', validate(createVoteSchema), asyncHandler(async (req, res) => {
+  const { project_id, citizen_id, citizen_phone, city_id, position, reasoning, neighborhood } = req.body;
+  
+  // Verificar se o cidadão já votou neste projeto
+  if (citizen_id) {
     const { data: existingVote } = await supabase
       .from('votes')
       .select('id')
@@ -284,19 +343,39 @@ app.post('/api/votes', async (req, res) => {
     if (existingVote) {
       return res.status(400).json({ error: 'Cidadão já votou neste projeto' });
     }
-
-    const { data, error } = await supabase
-      .from('votes')
-      .insert([{ project_id, citizen_id, position, reasoning, neighborhood }])
-      .select()
-      .single();
-
-    if (error) throw error;
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
-});
+
+  // Buscar city_id do projeto se não fornecido
+  let finalCityId = city_id;
+  if (!finalCityId && project_id) {
+    const { data: project } = await supabase
+      .from('projects')
+      .select('city_id')
+      .eq('id', project_id)
+      .single();
+    if (project) finalCityId = project.city_id;
+  }
+
+  const { data, error } = await supabase
+    .from('votes')
+    .insert([{ 
+      project_id, 
+      citizen_id, 
+      citizen_phone: citizen_phone || null,
+      city_id: finalCityId || null,
+      position, 
+      reasoning, 
+      neighborhood,
+      upvotes: 0,
+      downvotes: 0,
+      quality_score: 0
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  res.json(data);
+}));
 
 // Rotas de Comentários
 app.get('/api/comments', async (req, res) => {
@@ -328,22 +407,24 @@ app.get('/api/comments', async (req, res) => {
   }
 });
 
-app.post('/api/comments', async (req, res) => {
-  try {
-    const { project_id, citizen_id, content } = req.body;
-    
-    const { data, error } = await supabase
-      .from('comments')
-      .insert([{ project_id, citizen_id, content }])
-      .select()
-      .single();
+app.post('/api/comments', validate(createCommentSchema), asyncHandler(async (req, res) => {
+  const { project_id, citizen_id, citizen_phone, content, city_id } = req.body;
+  
+  const { data, error } = await supabase
+    .from('comments')
+    .insert([{ 
+      project_id, 
+      citizen_id, 
+      citizen_phone: citizen_phone || null,
+      city_id: city_id || null,
+      content 
+    }])
+    .select()
+    .single();
 
-    if (error) throw error;
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  if (error) throw error;
+  res.json(data);
+}));
 
 app.put('/api/comments/:id', async (req, res) => {
   try {
@@ -463,20 +544,21 @@ app.get('/api/complaints/:id', async (req, res) => {
   }
 });
 
-app.post('/api/complaints', async (req, res) => {
-  try {
-    const { citizen_id, city_id, project_id, original_text, category } = req.body;
+app.post('/api/complaints', validate(createComplaintSchema), asyncHandler(async (req, res) => {
+  const { citizen_id, citizen_phone, city_id, project_id, original_complaint, original_text, category } = req.body;
+    
+    const complaintText = original_complaint || original_text;
     
     // Usar IA para processar reclamação
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
     
     const complaintPrompt = `Analise esta reclamação e forneça:
 
-Reclamação: ${original_text}
+Reclamação: ${complaintText}
 
 Forneça:
-1. Categoria principal (saúde, educação, infraestrutura, segurança, transporte, meio ambiente, outros)
-2. Órgão responsável provável
+1. Categoria principal (iluminacao, asfalto, saude, educacao, transporte, seguranca, limpeza, meio_ambiente, outro)
+2. Órgão responsável provável (prefeitura, camara, estado, outro)
 3. Texto formal da reclamação
 
 Formato de resposta:
@@ -489,20 +571,24 @@ TEXTO_FORMAL: [texto formal]`;
     const aiText = response.text();
     
     // Parse da resposta da IA
-    const finalCategory = aiText.match(/CATEGORIA: (.+)/)?.[1] || category || 'outros';
-    const responsibleAgency = aiText.match(/ORGAO: (.+)/)?.[1] || 'Prefeitura Municipal';
-    const formalDocument = aiText.match(/TEXTO_FORMAL: (.+)/)?.[1] || original_text;
+    const finalCategory = aiText.match(/CATEGORIA: (.+)/)?.[1] || category || 'outro';
+    const responsibleAgency = aiText.match(/ORGAO: (.+)/)?.[1] || 'prefeitura';
+    const formalDocument = aiText.match(/TEXTO_FORMAL: (.+)/)?.[1] || complaintText;
     
     const { data, error } = await supabase
       .from('complaints')
       .insert([{
         citizen_id,
+        citizen_phone: citizen_phone || null,
         city_id,
         project_id: project_id || null,
-        original_text,
-        formal_document,
+        original_complaint: complaintText,
+        formal_document: formalDocument,
         category: finalCategory,
-        responsible_agency: responsibleAgency
+        responsible_agency: responsibleAgency,
+        status: 'registrada',
+        document_url: null,
+        sent_date: null
       }])
       .select()
       .single();
@@ -513,21 +599,23 @@ TEXTO_FORMAL: [texto formal]`;
     // await generateComplaintPDF(data.id);
     
     res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+}));
+
+// Rotas do WhatsApp
+import whatsappRoutes from './routes/whatsapp.js';
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Rotas de Conversas WhatsApp
 app.get('/api/conversations', async (req, res) => {
   try {
-    const { citizen_phone, limit = 50 } = req.query;
+    const { citizen_phone, limit } = req.query;
+    const limitNum = typeof limit === 'string' ? parseInt(limit, 10) : (typeof limit === 'number' ? limit : 50);
     
     let query = supabase
       .from('conversations')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(limitNum);
     
     if (citizen_phone) {
       query = query.eq('citizen_phone', citizen_phone);
@@ -562,24 +650,148 @@ app.get('/api/conversations/:id', async (req, res) => {
   }
 });
 
-// Rotas WhatsApp
-app.get('/api/whatsapp/qr', (req, res) => {
-  // Implementar geração de QR code para WhatsApp
-  res.json({ message: 'QR Code endpoint - implementar com Baileys' });
-});
+// Variável global para armazenar o socket do WhatsApp
+let whatsappSocket: any = null;
 
-app.post('/api/whatsapp/send', async (req, res) => {
+// Rotas WhatsApp
+app.get('/api/whatsapp/status', asyncHandler(async (req, res) => {
   try {
+    const whatsappModule = await import('./whatsapp.js');
+    const status = whatsappModule.getGlobalConnectionStatus();
+    const qrCode = whatsappModule.getGlobalQRCode();
+    
+    res.json({
+      status: status,
+      qrCode: qrCode,
+      connected: status === 'connected',
+      socketExists: whatsappSocket !== null
+    });
+  } catch (error: any) {
+    console.error('Erro ao buscar status WhatsApp:', error);
+    res.status(500).json({ error: error.message || 'Erro ao buscar status' });
+  }
+}));
+
+app.get('/api/whatsapp/qr', asyncHandler(async (req, res) => {
+  try {
+    const whatsappModule = await import('./whatsapp.js');
+    const status = whatsappModule.getGlobalConnectionStatus();
+    const qrCode = whatsappModule.getGlobalQRCode();
+    
+    if (qrCode) {
+      res.json({ qrCode: qrCode, status: status });
+    } else {
+      res.json({ 
+        qrCode: null, 
+        status: status, 
+        message: 'QR Code ainda não foi gerado. Inicie a conexão primeiro.' 
+      });
+    }
+  } catch (error: any) {
+    console.error('Erro ao buscar QR Code:', error);
+    res.status(500).json({ error: error.message || 'Erro ao buscar QR Code' });
+  }
+}));
+
+app.post('/api/whatsapp/connect', asyncHandler(async (req, res) => {
+  try {
+    const whatsappModule = await import('./whatsapp.js');
+    const currentStatus = whatsappModule.getGlobalConnectionStatus();
+    
+    if (currentStatus === 'connected') {
+      return res.json({ 
+        success: true, 
+        message: 'WhatsApp já está conectado', 
+        status: currentStatus 
+      });
+    }
+
+    if (currentStatus === 'connecting') {
+      return res.json({ 
+        success: false, 
+        message: 'Conexão já em andamento', 
+        status: currentStatus 
+      });
+    }
+
+    // Importar e iniciar conexão WhatsApp (não aguardar, pois é assíncrono)
+    whatsappModule.connectToWhatsApp().then((sock) => {
+      whatsappSocket = sock;
+      console.log('WhatsApp socket criado com sucesso');
+    }).catch(async (err) => {
+      console.error('Erro ao conectar WhatsApp:', err);
+      // Atualizar status para disconnected em caso de erro
+      try {
+        const errorModule = await import('./whatsapp.js');
+        errorModule.setGlobalConnectionStatus('disconnected');
+      } catch (importError) {
+        console.error('Erro ao atualizar status:', importError);
+      }
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Conexão iniciada. Escaneie o QR Code quando aparecer.',
+      status: 'connecting'
+    });
+  } catch (error: any) {
+    console.error('Erro ao iniciar conexão WhatsApp:', error);
+    res.status(500).json({ error: error.message || 'Erro ao iniciar conexão' });
+  }
+}));
+
+app.post('/api/whatsapp/disconnect', asyncHandler(async (req, res) => {
+  try {
+    if (whatsappSocket) {
+      try {
+        await whatsappSocket.logout();
+      } catch (err) {
+        console.error('Erro ao fazer logout:', err);
+      }
+      whatsappSocket = null;
+    }
+    
+    const whatsappModule = await import('./whatsapp.js');
+    whatsappModule.setGlobalConnectionStatus('disconnected');
+    whatsappModule.setGlobalQRCode(null);
+    
+    res.json({ 
+      success: true, 
+      message: 'WhatsApp desconectado com sucesso',
+      status: 'disconnected'
+    });
+  } catch (error: any) {
+    console.error('Erro ao desconectar WhatsApp:', error);
+    res.status(500).json({ error: error.message || 'Erro ao desconectar' });
+  }
+}));
+
+app.post('/api/whatsapp/send', asyncHandler(async (req, res) => {
+  try {
+    const whatsappModule = await import('./whatsapp.js');
+    const currentStatus = whatsappModule.getGlobalConnectionStatus();
+    
+    if (currentStatus !== 'connected' || !whatsappSocket) {
+      return res.status(400).json({ error: 'WhatsApp não está conectado' });
+    }
+
     const { phone, message } = req.body;
     
-    // Implementar envio de mensagem via Baileys
-    // Por enquanto, apenas simular
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'Telefone e mensagem são obrigatórios' });
+    }
+
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const jid = `${cleanPhone}@s.whatsapp.net`;
     
-    res.json({ message: 'Mensagem enviada com sucesso', phone, message });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    await whatsappSocket.sendMessage(jid, { text: message });
+    
+    res.json({ success: true, phone: cleanPhone, sentMessage: message });
+  } catch (error: any) {
+    console.error('Erro ao enviar mensagem:', error);
+    res.status(500).json({ error: error.message || 'Erro ao enviar mensagem' });
   }
-});
+}));
 
 // Função auxiliar para notificar cidadãos
 async function notifyCitizens(cityId: string, type: string, data: any) {
@@ -626,6 +838,18 @@ app.get('/api/health', (req, res) => {
     gemini: !!process.env.GOOGLE_API_KEY
   });
 });
+
+// Configurar encoding UTF-8 para todas as respostas JSON
+app.use((req, res, next) => {
+  // Garantir que todas as respostas JSON usem UTF-8
+  if (res.getHeader('Content-Type')?.toString().includes('application/json')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  }
+  next();
+});
+
+// Error Handler Global (deve ser o último middleware)
+app.use(errorHandler);
 
 // Iniciar servidor
 app.listen(port, () => {

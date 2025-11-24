@@ -3,8 +3,12 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CommentsSection } from '@/components/projects/CommentsSection'
+import { VoteReactions } from '@/components/projects/VoteReactions'
+import { VotingChart } from '@/components/visualizations/VotingChart'
+import { EngagementChart } from '@/components/visualizations/EngagementChart'
+import { CategoryDistribution } from '@/components/visualizations/CategoryDistribution'
 import { useStore } from '@/store/appStore'
 import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import { toast } from 'sonner'
@@ -24,7 +28,9 @@ import {
   Flag,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  ExternalLink,
+  Share2
 } from 'lucide-react'
 
 interface ProjectDetail {
@@ -43,6 +49,10 @@ interface ProjectDetail {
   total_comments: number
   engagement_score: number
   created_at: string
+  author?: string
+  original_url?: string
+  vote_date?: string
+  main_impacts?: string[]
   votes?: Vote[]
   comments?: Comment[]
   complaints?: Complaint[]
@@ -54,9 +64,13 @@ interface Vote {
   reasoning?: string
   neighborhood?: string
   created_at: string
+  upvotes?: number
+  downvotes?: number
+  quality_score?: number
   citizens?: {
     name: string
   }
+  citizen_name?: string
 }
 
 interface Comment {
@@ -88,9 +102,10 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<ProjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [readingMode, setReadingMode] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
+  const [showCharts, setShowCharts] = useState(false)
   const [commentText, setCommentText] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
 
   useAutoRefresh()
 
@@ -103,14 +118,26 @@ export default function ProjectDetail() {
   const fetchProjectDetail = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${apiUrl}/api/projects/${id}`)
+      const response = await fetch(`${apiUrl}/api/projects/${id}`, {
+        headers: {
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
+      })
       if (!response.ok) throw new Error('Erro ao buscar projeto')
       const data = await response.json()
       setProject(data)
 
       // Buscar reclamações relacionadas
       if (id) {
-        const complaintsResponse = await fetch(`${apiUrl}/api/complaints?project_id=${id}`)
+        const complaintsResponse = await fetch(`${apiUrl}/api/complaints?project_id=${id}`, {
+          headers: {
+            'Accept': 'application/json; charset=utf-8',
+            'Accept-Charset': 'utf-8',
+            'Content-Type': 'application/json; charset=utf-8'
+          }
+        })
         if (complaintsResponse.ok) {
           const complaints = await complaintsResponse.json()
           setProject(prev => prev ? { ...prev, complaints } : null)
@@ -149,7 +176,11 @@ export default function ProjectDetail() {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
       const response = await fetch(`${apiUrl}/api/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8'
+        },
         body: JSON.stringify({
           project_id: id,
           citizen_id: 'temp-citizen-id', // TODO: usar ID real do cidadão logado
@@ -252,7 +283,7 @@ export default function ProjectDetail() {
     : 0
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       {/* Header com Botão Voltar */}
       <div className="flex items-center justify-between">
         <Link to="/">
@@ -261,23 +292,59 @@ export default function ProjectDetail() {
             Voltar
           </Button>
         </Link>
-        <Button
-          variant="outline"
-          onClick={() => setReadingMode(!readingMode)}
-        >
-          {readingMode ? (
-            <>
-              <EyeOff className="h-4 w-4 mr-2" />
-              Sair do Modo Leitura
-            </>
-          ) : (
-            <>
-              <Eye className="h-4 w-4 mr-2" />
-              Modo Leitura
-            </>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowCharts(!showCharts)}
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            {showCharts ? 'Ocultar' : 'Mostrar'} Gráficos
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setReadingMode(!readingMode)}
+          >
+            {readingMode ? (
+              <>
+                <EyeOff className="h-4 w-4 mr-2" />
+                Sair do Modo Leitura
+              </>
+            ) : (
+              <>
+                <Eye className="h-4 w-4 mr-2" />
+                Modo Leitura
+              </>
+            )}
+          </Button>
+          {project.original_url && (
+            <a 
+              href={project.original_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center border-2 border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Ver Original
+            </a>
           )}
-        </Button>
+        </div>
       </div>
+
+      {/* Gráficos (Toggle) */}
+      {showCharts && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          <VotingChart 
+            data={[
+              { name: project.simple_title || project.title, support: project.total_support, against: project.total_against }
+            ]}
+            title="Votação do Projeto"
+          />
+          <EngagementChart 
+            data={[]}
+            title="Engajamento"
+          />
+        </div>
+      )}
 
       {/* Card Principal do Projeto */}
       <Card className={readingMode ? 'max-w-4xl mx-auto' : ''}>
@@ -285,12 +352,18 @@ export default function ProjectDetail() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant={getStatusBadge(project.status)}>
+                <Badge variant={getStatusBadge(project.status) as any}>
                   {getStatusLabel(project.status)}
                 </Badge>
                 <span className="text-sm text-muted-foreground">
                   Projeto {project.number}
                 </span>
+                {project.author && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <User className="h-4 w-4" />
+                    <span>{project.author}</span>
+                  </div>
+                )}
               </div>
               <CardTitle className="text-3xl">
                 {project.simple_title || project.title}
@@ -299,6 +372,12 @@ export default function ProjectDetail() {
                 <CardDescription className="text-base">
                   {project.summary}
                 </CardDescription>
+              )}
+              {project.vote_date && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  <span>Votação prevista: {new Date(project.vote_date).toLocaleDateString('pt-BR')}</span>
+                </div>
               )}
             </div>
           </div>
@@ -383,6 +462,25 @@ export default function ProjectDetail() {
                 </Card>
               )}
 
+              {/* Main Impacts */}
+              {project.main_impacts && project.main_impacts.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                      Principais Impactos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="list-disc list-inside space-y-2">
+                      {project.main_impacts.map((impact, index) => (
+                        <li key={index} className="text-sm">{impact}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
               {project.tags && project.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {project.tags.map((tag, index) => (
@@ -395,43 +493,15 @@ export default function ProjectDetail() {
             {/* Tab: Votos */}
             <TabsContent value="votes" className="space-y-4">
               {project.votes && project.votes.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {project.votes.map((vote) => (
-                    <Card key={vote.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-full ${
-                            vote.position === 'support' 
-                              ? 'bg-green-100 dark:bg-green-900/20' 
-                              : 'bg-red-100 dark:bg-red-900/20'
-                          }`}>
-                            {vote.position === 'support' ? (
-                              <ThumbsUp className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <ThumbsDown className="h-5 w-5 text-red-600" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium">
-                                {vote.citizens?.name || 'Cidadão'}
-                              </span>
-                              {vote.neighborhood && (
-                                <Badge variant="outline" className="text-xs">
-                                  {vote.neighborhood}
-                                </Badge>
-                              )}
-                            </div>
-                            {vote.reasoning && (
-                              <p className="text-sm text-muted-foreground">{vote.reasoning}</p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-2">
-                              {new Date(vote.created_at).toLocaleDateString('pt-BR')}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <VoteReactions 
+                      key={vote.id} 
+                      vote={vote}
+                      onReaction={(voteId, type) => {
+                        // TODO: Implementar reação aos votos
+                      }}
+                    />
                   ))}
                 </div>
               ) : (
@@ -445,60 +515,14 @@ export default function ProjectDetail() {
             </TabsContent>
 
             {/* Tab: Comentários */}
-            <TabsContent value="comments" className="space-y-4">
-              {/* Formulário de Comentário */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Adicionar Comentário</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCommentSubmit} className="space-y-3">
-                    <Input
-                      placeholder="Digite seu comentário..."
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      disabled={submittingComment}
-                    />
-                    <Button type="submit" disabled={!commentText.trim() || submittingComment}>
-                      {submittingComment ? 'Enviando...' : 'Enviar Comentário'}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              {/* Lista de Comentários */}
-              {project.comments && project.comments.length > 0 ? (
-                <div className="space-y-3">
-                  {project.comments
-                    .filter(c => c.moderation_status === 'approved')
-                    .map((comment) => (
-                    <Card key={comment.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">
-                              {comment.citizens?.name || 'Anônimo'}
-                            </span>
-                            {getSentimentBadge(comment.sentiment)}
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(comment.created_at).toLocaleDateString('pt-BR')}
-                          </span>
-                        </div>
-                        <p className="text-sm">{comment.content}</p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Nenhum comentário ainda</p>
-                  </CardContent>
-                </Card>
-              )}
+            <TabsContent value="comments">
+              <CommentsSection 
+                projectId={project.id}
+                comments={project.comments || []}
+                onCommentAdded={() => {
+                  fetchProjectDetail()
+                }}
+              />
             </TabsContent>
 
             {/* Tab: Reclamações */}

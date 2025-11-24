@@ -49,7 +49,13 @@ export default function Moderation() {
   const fetchComments = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${apiUrl}/api/comments`)
+      const response = await fetch(`${apiUrl}/api/comments`, {
+        headers: {
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
+      })
       if (!response.ok) throw new Error('Erro ao buscar comentários')
       const data = await response.json()
       setComments(data)
@@ -85,7 +91,9 @@ export default function Moderation() {
       const response = await fetch(`${apiUrl}/api/comments/${commentId}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8'
         },
         body: JSON.stringify({ moderation_status: status }),
       })
@@ -182,7 +190,7 @@ export default function Moderation() {
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-lg">Comentário</CardTitle>
-                        <Badge variant={getStatusBadge(comment.moderation_status)}>
+                        <Badge variant={getStatusBadge(comment.moderation_status) as any}>
                           {getStatusIcon(comment.moderation_status)}
                           <span className="ml-1">{getStatusLabel(comment.moderation_status)}</span>
                         </Badge>

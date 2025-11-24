@@ -58,7 +58,13 @@ export default function Complaints() {
       const url = currentCity 
         ? `${apiUrl}/api/complaints?city_id=${currentCity.id}` 
         : `${apiUrl}/api/complaints`
-      const response = await fetch(url)
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+          'Content-Type': 'application/json; charset=utf-8'
+        }
+      })
       if (!response.ok) throw new Error('Erro ao buscar reclamações')
       const data = await response.json()
       setComplaints(data)
@@ -173,7 +179,7 @@ export default function Complaints() {
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-lg capitalize">{complaint.category}</CardTitle>
-                        <Badge variant={getStatusBadge(complaint.status)}>
+                        <Badge variant={getStatusBadge(complaint.status) as any}>
                           {getStatusIcon(complaint.status)}
                           <span className="ml-1">{getStatusLabel(complaint.status)}</span>
                         </Badge>
@@ -223,12 +229,15 @@ export default function Complaints() {
                       {new Date(complaint.created_at).toLocaleDateString('pt-BR')}
                     </div>
                     {complaint.pdf_url && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={complaint.pdf_url} target="_blank" rel="noopener noreferrer">
-                          <FileText className="h-3 w-3 mr-1" />
-                          Ver PDF
-                        </a>
-                      </Button>
+                      <a 
+                        href={complaint.pdf_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center border-2 border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        Ver PDF
+                      </a>
                     )}
                   </div>
 

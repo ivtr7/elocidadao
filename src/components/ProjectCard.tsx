@@ -66,7 +66,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant={getStatusBadge(project.status)}>
+                <Badge variant={getStatusBadge(project.status) as any}>
                   {getStatusLabel(project.status)}
                 </Badge>
                 <span className="text-xs text-muted-foreground">

@@ -45,9 +45,16 @@ export default defineConfig({
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             console.log('Sending Request to the Target:', req.method, req.url);
+            // Ensure UTF-8 headers
+            proxyReq.setHeader('Accept', 'application/json; charset=utf-8');
+            proxyReq.setHeader('Accept-Charset', 'utf-8');
+            proxyReq.setHeader('Content-Type', 'application/json; charset=utf-8');
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
             console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+            // Ensure UTF-8 in response
+            proxyRes.headers['content-type'] = 'application/json; charset=utf-8';
+            proxyRes.headers['accept-charset'] = 'utf-8';
           });
         },
       }

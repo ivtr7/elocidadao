@@ -127,7 +127,7 @@ export default function Projects() {
                         Projeto {project.number}
                       </CardDescription>
                     </div>
-                    <Badge variant={getStatusBadge(project.status)}>
+                    <Badge variant={getStatusBadge(project.status) as any}>
                       {getStatusLabel(project.status)}
                     </Badge>
                   </div>

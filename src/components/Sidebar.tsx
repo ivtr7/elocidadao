@@ -17,55 +17,49 @@ const sidebarItems = [
   {
     title: 'Dashboard',
     icon: Home,
-    href: '/',
+    href: '/dashboard',
     description: 'Visão geral do sistema'
-  },
-  {
-    title: 'Central de Projetos',
-    icon: FileText,
-    href: '/home',
-    description: 'Blog de projetos de lei'
   },
   {
     title: 'Cidades',
     icon: MapPin,
-    href: '/cities',
+    href: '/dashboard/cities',
     description: 'Cadastrar e gerenciar cidades'
   },
   {
     title: 'Projetos',
     icon: FileText,
-    href: '/projects',
+    href: '/dashboard/projects',
     description: 'Gerenciar projetos municipais'
   },
   {
     title: 'Cidadãos',
     icon: Users,
-    href: '/citizens',
+    href: '/dashboard/citizens',
     description: 'Participantes da cidade'
-  },
-  {
-    title: 'Rankings',
-    icon: Trophy,
-    href: '/rankings',
-    description: 'Projetos mais votados'
   },
   {
     title: 'Reclamações',
     icon: Flag,
-    href: '/complaints',
+    href: '/dashboard/complaints',
     description: 'Solicitações da população'
   },
   {
     title: 'Moderação',
     icon: MessageSquare,
-    href: '/moderation',
+    href: '/dashboard/moderation',
     description: 'Aprovar conteúdo'
+  },
+  {
+    title: 'Agente WhatsApp',
+    icon: MessageSquare,
+    href: '/dashboard/whatsapp',
+    description: 'Configurar conexão WhatsApp'
   },
   {
     title: 'Configurações',
     icon: Settings,
-    href: '/settings',
+    href: '/dashboard/settings',
     description: 'Preferências do sistema'
   }
 ]
@@ -93,7 +87,7 @@ export function Sidebar() {
         <div className="space-y-1">
           {sidebarItems.map((item) => {
             const Icon = item.icon
-            const isActive = location.pathname === item.href
+            const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
             
             return (
               <Link

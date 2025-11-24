@@ -50,7 +50,7 @@ export function Header() {
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Admin</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 mt-2">
+            <DropdownMenuContent className="w-56 mt-2" style={{ position: 'absolute', right: 0 }}>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Administrador</p>
